@@ -65,6 +65,11 @@ services:
       - ./service/scripts/requirements.sh:/app/scripts/requirements.sh:ro
       - ./service/scripts/entrypoint.sh:/app/scripts/entrypoint.sh:ro
       - ./service/app.py:/app/app.py:ro
+      - ./service/api.py:/app/api.py:ro
+      - ./service/local_processor.py:/app/local_processor.py:ro
+      - ./service/ollama_processor.py:/app/ollama_processor.py:ro
+      - ./service/processor.py:/app/processor.py:ro
+      - ./service/utils.py:/app/utils.py:ro
 
   ## Ollama Large Language Models
   ## see https://ollama.com/search?c=vision
