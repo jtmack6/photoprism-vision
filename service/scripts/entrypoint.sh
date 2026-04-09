@@ -11,8 +11,8 @@ fi
 
 if [ ! -z "$PHOTOPRISM_UID" ]; then
   echo "Switching to user id $PHOTOPRISM_UID..."
-  exec gosu $PHOTOPRISM_UID gunicorn "$@"
+  exec gosu $PHOTOPRISM_UID gunicorn --timeout ${GUNICORN_TIMEOUT:-120} "$@"
 else
   # Run as default user
-  exec gunicorn "$@"
+  exec gunicorn --timeout ${GUNICORN_TIMEOUT:-120} "$@"
 fi

@@ -85,39 +85,41 @@ Or base64 images: `{"images": ["data:image/png;base64,..."]}`
 ### Docker Setup
 
 - `service/Dockerfile` — Python 3.12-slim, runs as UID 1000, venv initialized at container start via `service/scripts/entrypoint.sh`
-- `compose.yaml` (root) — Defines `photoprism-vision` (port 5000) and `ollama` (port 11434) services with GPU support
+- `compose.yaml` (root) — Defines `photoprism-vision` (host port 5050, container port 5000) and `ollama` (port 11434) services with GPU support
+- All `service/*.py` and `service/scripts/*.sh` are bind-mounted into the container for development without rebuilding
 - Models and venv are stored in named Docker volumes to persist across restarts
+- Entrypoint runs as root, `chown`s volume mounts, then `gosu`s to UID 1000 — do not set `user:` in compose.yaml (breaks permissions on native Linux)
 
 ## Infrastructure Notes
 
 ### Hosts
 
-- **budgie.grave.loco** — M4 Mac, 128GB RAM. Runs PhotoPrism + Ollama + photoprism-vision via Colima (Docker)
-- **kuc.grave.loco** — NAS with photo library (NFS source)
-- **mcarch** — development machine
+- **mcarch** — Arch Linux development machine (192.168.1.118). Runs PhotoPrism + photoprism-vision + Ollama via Docker. Has NVIDIA RTX 4070 Ti GPU.
+- **budgie.grave.loco** — M4 Mac, 128GB RAM. Previously ran the stack via Colima (Docker)
+- **kuc.grave.loco** — Synology NAS with photo library (NFS source, 192.168.1.16)
 
 ### PhotoPrism Setup (`../photoprism/`)
 
-PhotoPrism runs in Docker via Colima on budgie. Config at `../photoprism/compose.yaml`.
+PhotoPrism runs in Docker on mcarch. Config at `../photoprism/compose.yaml`.
 
-**NFS mounts** — must be manually mounted inside the Colima VM on each restart (not yet automated). To make permanent, add to `~/.colima/default/colima.yaml` on budgie:
-
-```yaml
-provision:
-  - mode: system
-    script: |
-      mkdir -p /mnt/kuc-pictures /mnt/extpool-pix /mnt/pics
-      mount -t nfs -o ro,soft,intr,nfsvers=4.1 kuc.grave.loco:/rocket/Pictures /mnt/kuc-pictures
-      mount -t nfs -o ro,soft,intr,nfsvers=4.1 kuc.grave.loco:/mnt/extpool/pictures /mnt/extpool-pix
-      mount -t nfs -o ro,soft,intr,nfsvers=4.1 kuc.grave.loco:/Pictures /mnt/pics
+**NFS mounts from kuc** — three read-only NFS4.1 shares mounted on mcarch:
+```
+kuc.grave.loco:/rocket/Pictures        → /mnt/kuc-pictures
+kuc.grave.loco:/mnt/extpool/pictures   → /mnt/extpool-pix
+kuc.grave.loco:/Pictures               → /mnt/pics
 ```
 
 **Volume mounts in compose.yaml** — each NFS share is a subdirectory under `/photoprism/originals`:
 ```yaml
-- "~/Pictures:/photoprism/originals/local"
 - "/mnt/kuc-pictures:/photoprism/originals/kuc-pictures"
 - "/mnt/extpool-pix:/photoprism/originals/extpool-pix"
 - "/mnt/pics:/photoprism/originals/pics"
+```
+
+**NFS permission issue** — ~46 files on kuc have `0640`/`0700` permissions and are unreadable by PhotoPrism. Fix on kuc:
+```bash
+find /mnt/extpool/pictures -type f ! -perm -o=r -exec chmod o+r {} +
+find /rocket/Pictures -type f ! -perm -o=r -exec chmod o+r {} +
 ```
 
 **Clean restart:**
@@ -127,22 +129,39 @@ rm -rf ./storage
 docker compose up -d
 ```
 
-**vision.yml** (`../photoprism/storage/config/vision.yml`) — PhotoPrism's AI model config. Currently configured for Ollama labels via `gemma3:latest` at `http://budgie.grave.loco:11434/api/generate`.
+**vision.yml** (`../photoprism/storage/config/vision.yml`) — PhotoPrism's AI model config. Configured with `Engine: vision` pointing at `http://host.docker.internal:5050` for caption, labels, and NSFW. PhotoPrism's compose.yaml has `extra_hosts: host.docker.internal:host-gateway` to enable this.
 
-### photoprism-vision on budgie
-
-Run directly (not via Docker) from `service/` using the `venv`:
+**Vision models are not run during indexing.** They must be triggered separately:
 ```bash
-cd ~/Projects/Photo/photoprism-vision/service
-./venv/bin/python app.py
+# Manual run (after indexing completes)
+docker compose exec photoprism photoprism vision run -m caption,labels,nsfw
+
+# Or set a schedule in compose.yaml environment:
+PHOTOPRISM_VISION_SCHEDULE: "daily"
 ```
 
-Service binds to `0.0.0.0:5000`. Test with:
+Other useful vision commands:
 ```bash
-curl -s -X POST http://127.0.0.1:5000/api/v1/vision/caption -H "Content-Type: application/json" -d '{"url":"https://dl.photoprism.app/img/team/avatar.jpg"}' | python3 -m json.tool
+docker compose exec photoprism photoprism vision ls      # List configured models
+docker compose exec photoprism photoprism vision run --dry-run  # Preview without executing
 ```
 
-Note: use `127.0.0.1` not `localhost` on macOS to avoid IPv6 resolution issues.
+### Testing photoprism-vision
+
+Service runs on host port 5050. Test with:
+```bash
+# Caption (default model: kosmos-2)
+curl -s -X POST http://127.0.0.1:5050/api/v1/vision/caption \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://dl.photoprism.app/img/team/avatar.jpg"}' | python3 -m json.tool
+
+# NSFW detection
+curl -s -X POST http://127.0.0.1:5050/api/v1/vision/nsfw/nsfw_image_detector/latest \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://dl.photoprism.app/img/team/avatar.jpg"}' | python3 -m json.tool
+```
+
+Note: `vit-gpt2` model has a known `_reorder_cache` compatibility issue with current `transformers` versions.
 
 ### Known Bugs Fixed
 

@@ -48,7 +48,8 @@ class OllamaImageProcessor(ImageProcessor):
         if prompt == '' or prompt == 'default':
             prompt = labels_prompt
 
-        status, result = self._generate_with_prompt(model_name, model_version, images, prompt, schema=schema)
+        # Most vision models only support one image at a time
+        status, result = self._generate_with_prompt(model_name, model_version, [images[0]], prompt, schema=schema)
         if status == 'ok':
             try:
                 labels = Labels.model_validate_json(result)
