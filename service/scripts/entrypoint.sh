@@ -1,5 +1,10 @@
 #!/bin/bash
 
+# Fix ownership of mounted volumes so the app user can write to them
+if [ ! -z "$PHOTOPRISM_UID" ]; then
+  chown -R "$PHOTOPRISM_UID:${PHOTOPRISM_GID:-$PHOTOPRISM_UID}" /app/venv /app/models 2>/dev/null || true
+fi
+
 /app/scripts/requirements.sh
 
 . ./venv/bin/activate
@@ -11,4 +16,3 @@ else
   # Run as default user
   exec gunicorn "$@"
 fi
-

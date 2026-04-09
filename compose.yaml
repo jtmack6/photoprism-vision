@@ -10,8 +10,7 @@ services:
     ## Insecurely exposes the Vision service on port 5000
     ## without authentication (for private networks only):
     ports:
-      - "5000:5000"
-    user: 1000:1000
+      - "5050:5000"
     security_opt:
       - seccomp:unconfined
       - apparmor:unconfined
@@ -63,6 +62,9 @@ services:
     volumes:
       - models:/app/models
       - venv:/app/venv
+      - ./service/scripts/requirements.sh:/app/scripts/requirements.sh:ro
+      - ./service/scripts/entrypoint.sh:/app/scripts/entrypoint.sh:ro
+      - ./service/app.py:/app/app.py:ro
 
   ## Ollama Large Language Models
   ## see https://ollama.com/search?c=vision
