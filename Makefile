@@ -2,11 +2,12 @@ BUILD_GIT ?= $(shell (cd .. && git describe --always))
 BUILD_DATE ?= $(shell date -u +%y%m%d)
 BUILD_TAG ?= $(BUILD_DATE)-$(BUILD_GIT)
 
-UNAME := $(shell uname)
+all: deps
+deps: sync
+install: sync
 
-all: pip install
-deps: pip upgrade
-install: venv
+sync:
+	uv sync
 
 build: docker-build
 docker-build:
@@ -37,17 +38,8 @@ terminal:
 logs:
 	docker compose logs -f || true
 
-pip:
-ifeq ($(UNAME), Linux)
-	sudo apt-get install -y git python3 python3-pip python3-venv python3-wheel
-endif
-
-venv: service
-service/venv:
-	make -C service venv
-
-upgrade:
-	make -C service upgrade
+export-requirements:
+	uv export --no-hashes --no-dev -o service/requirements.txt
 
 # Declare all targets as "PHONY", see https://www.gnu.org/software/make/manual/html_node/Phony-Targets.html.
 MAKEFLAGS += --always-make

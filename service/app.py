@@ -39,11 +39,12 @@ def parse_image_from_request():
     return data, image
 
 
+DEFAULT_MODEL = os.getenv('DEFAULT_MODEL', 'kosmos-2')
+DEFAULT_VERSION = os.getenv('DEFAULT_VERSION', 'latest')
+
 def parse_model_info_from_request() -> tuple[str, str]:
     data = request.get_json() if request.is_json else request.args
-    if data.get('model'):
-        return data.get('model'), data.get('version', 'latest')
-    raise ValueError("model name is required")
+    return data.get('model', DEFAULT_MODEL), data.get('version', DEFAULT_VERSION)
 
 def parse_prompt_from_request():
     data = request.get_json() if request.is_json else request.args
@@ -161,4 +162,4 @@ def detect_nsfw(model_name: str, model_version: str) -> tuple[Response, int]:
 
 
 if __name__ == '__main__':
-    app.run(port=5000, debug=True)
+    app.run(host='0.0.0.0', port=5000, debug=True)
