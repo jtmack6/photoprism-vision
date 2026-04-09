@@ -131,8 +131,9 @@ class Kosmos2Processor(TorchImageProcessor):
     def generate_caption(self, image: Image, prompt) -> tuple[str, str]:
         try:
             self.load_if_needed()
-            if prompt == '' or prompt == 'default':
-                prompt = "<grounding>An image of"
+            # Kosmos-2 requires its own grounding prompt format;
+            # custom prompts from callers produce garbled output
+            prompt = "<grounding>An image of"
 
             inputs = self.processor(text=prompt, images=image, return_tensors="pt")
 
